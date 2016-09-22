@@ -1,0 +1,32 @@
+{
+	"apiVersion": "extensions/v1beta1",
+	"kind": "Deployment",
+	"metadata": {
+		"name": "deployment-a"
+	},
+	"spec": {
+		"replicas": 1,
+		"template": {
+			"metadata": {
+				"labels": {
+					"app": "hello-a"
+				}
+			},
+			"spec": {
+				"containers": [
+					{
+						"name": "hello-a",
+						"image": "renansdias/hello-a:__VERSION__",
+						"ports": [
+							{
+								"containerPort": 1234,
+								"hostPort": 1234,
+								"name": "helloa"
+							}
+						]
+					}
+				]
+			}
+		}
+	}
+}
