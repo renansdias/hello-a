@@ -21,4 +21,4 @@ node {
 	if (serviceName != 'service/service-a') {
 		sh('kubectl apply -f service-a.json --context="aws_k8s" --kubeconfig="/var/lib/jenkins/.kube/config"')
 	}
-}
+}test
