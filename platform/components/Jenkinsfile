@@ -7,27 +7,16 @@ volumes: [
   hostPathVolume(mountPath: '/var/run/docker.sock', hostPath: '/var/run/docker.sock')
 ]) {
     node(label) {
-        stage('Checkout Repo') {
-            def git_vars = checkout([
-                $class: 'GitSCM', 
-                branches: [[name: env.BRANCH_NAME]],
-                doGenerateSubmoduleConfigurations: false, 
-                extensions: [
-                    [
-                        $class: 'LocalBranch', 
-                        localBranch: "**"
-                    ]
-                ], 
-                submoduleCfg: [], 
-                userRemoteConfigs: [
-                    [
-                        credentialsId: 'github-personal-token', 
-                        url: 'https://github.com/renansdias/hello-a.git'
-                    ]
-                ]
-            ])
+        def scmVars
+        def uniqueApplications
 
-            env.GIT_COMMIT = git_vars['GIT_COMMIT']
+        stage('Checkout Repo') {
+            scmVars = checkout scm 
+        }
+
+        stage('Extract Apps to Build') {
+            env.GIT_COMMIT = scmVars.GIT_COMMIT
+
             def filesChanged = sh(script: "git show --pretty=\"\" --name-only \${GIT_COMMIT} | tr '\r\n' ',' | sed 's/.\$//'", returnStdout: true)
             def files = filesChanged.split(',')
             def applications = []
@@ -46,8 +35,25 @@ volumes: [
                 }
             }
 
-            println "${applications}"
-            println "${applications.unique()}"
+            uniqueApplications = applications.unique()
+
+            println "${uniqueApplications}"
         }
+
+        // stage('Build images') {
+        //     uniqueApplications.each { app ->
+        //           container('docker') {
+        //             withCredentials([[$class: 'UsernamePasswordMultiBinding',
+        //             credentialsId: 'dockerhub',
+        //             usernameVariable: 'DOCKER_HUB_USER',
+        //             passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
+        //             sh """
+        //                 docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+        //                 docker build -t tgam/${app}:test platform/components/${app}
+        //                 """
+        //             }
+        //         }
+        //     }
+        // }
     }
 }
