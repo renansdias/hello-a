@@ -1,4 +1,53 @@
-node {
-	stage 'Checkout Repo'
-	sh('echo "Fixing commit"');
+def label = "worker-${UUID.randomUUID().toString()}"
+
+podTemplate(label: label, containers: [
+  containerTemplate(name: 'docker', image: 'docker', command: 'cat', ttyEnabled: true)
+],
+volumes: [
+  hostPathVolume(mountPath: '/var/run/docker.sock', hostPath: '/var/run/docker.sock')
+]) {
+    node(label) {
+        stage('Checkout Repo') {
+            def git_vars = checkout([
+                $class: 'GitSCM', 
+                branches: [[name: env.BRANCH_NAME]],
+                doGenerateSubmoduleConfigurations: false, 
+                extensions: [
+                    [
+                        $class: 'LocalBranch', 
+                        localBranch: "**"
+                    ]
+                ], 
+                submoduleCfg: [], 
+                userRemoteConfigs: [
+                    [
+                        credentialsId: 'github-personal-token', 
+                        url: 'https://github.com/renansdias/hello-a.git'
+                    ]
+                ]
+            ])
+
+            env.GIT_COMMIT = git_vars['GIT_COMMIT']
+            def filesChanged = sh(script: "git show --pretty=\"\" --name-only \${GIT_COMMIT} | tr '\r\n' ',' | sed 's/.\$//'", returnStdout: true)
+            def files = filesChanged.split(',')
+            def applications = []
+
+            files.each { file ->
+                def path = "${file}".split('/')
+
+                if (path.length > 3) { // If there are only 3 parts, the file modified doesnt belong to a project
+                    for (i = 0; i < path.length; i++) {
+                        if (i + 1 <= path.length) { // not the last item
+                            if (path[i] == "components") {
+                                applications.push(path[i + 1])
+                            }
+                        }
+                    }
+                }
+            }
+
+            println "${applications}"
+            println "${applications.unique()}"
+        }
+    }
 }
