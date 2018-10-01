@@ -1,4 +1,4 @@
 node {
 	stage 'Checkout Repo'
-	sh('echo heyyyy');
+	sh('echo "hey its master"');
 }
