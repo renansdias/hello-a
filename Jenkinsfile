@@ -1,4 +1,4 @@
 node {
 	stage 'Checkout Repo'
-	asdsasjdaosjdaoisjd
+	sh('echo "Fixing commit"');
 }
