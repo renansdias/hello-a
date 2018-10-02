@@ -1,5 +1,32 @@
 def label = "worker-${UUID.randomUUID().toString()}"
 
+def checkoutCurrentRepo() {
+    def vars = checkout scm
+
+    return vars
+}
+
+def extractAppsToDeploy(String fileChanges) {
+    def files = fileChanges.split(',')
+    def applications = []
+
+    files.each { file ->
+        def path = "${file}".split('/')
+
+        if (path.length > 3) { // If there are only 3 parts, the file modified doesnt belong to a project
+            for (i = 0; i < path.length; i++) {
+                if (i + 1 <= path.length) { // not the last item
+                    if (path[i] == "components") {
+                        applications.push(path[i + 1])
+                    }
+                }
+            }
+        }
+    }
+
+    return applications.unique()
+}
+
 podTemplate(label: label, containers: [
   containerTemplate(name: 'docker', image: 'docker', command: 'cat', ttyEnabled: true)
 ],
@@ -11,31 +38,16 @@ volumes: [
         def uniqueApplications
 
         stage('Checkout Repo') {
-            scmVars = checkout scm 
+            scmVars = checkoutCurrentRepo() 
+
+            println "${scmVars}"
         }
 
         stage('Extract Apps to Build') {
             env.GIT_COMMIT = scmVars.GIT_COMMIT
-
             def filesChanged = sh(script: "git show --pretty=\"\" --name-only \${GIT_COMMIT} | tr '\r\n' ',' | sed 's/.\$//'", returnStdout: true)
-            def files = filesChanged.split(',')
-            def applications = []
-
-            files.each { file ->
-                def path = "${file}".split('/')
-
-                if (path.length > 3) { // If there are only 3 parts, the file modified doesnt belong to a project
-                    for (i = 0; i < path.length; i++) {
-                        if (i + 1 <= path.length) { // not the last item
-                            if (path[i] == "components") {
-                                applications.push(path[i + 1])
-                            }
-                        }
-                    }
-                }
-            }
-
-            uniqueApplications = applications.unique()
+            
+            uniqueApplications = extractAppsToDeploy(filesChanged)
 
             println "${uniqueApplications}"
         }
