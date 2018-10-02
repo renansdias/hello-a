@@ -1,5 +1,66 @@
 def label = "worker-${UUID.randomUUID().toString()}"
 
+def checkoutCurrentRepo() {
+    def vars = checkout scm
+
+    return vars
+}
+
+def extractAppsToDeploy(String fileChanges) {
+    def files = fileChanges.split(',')
+    def applications = []
+
+    files.each { file ->
+        def path = "${file}".split('/')
+
+        if (path.length > 3) { // If there are only 3 parts or less, the file modified doesn't belong to a project
+            for (i = 0; i < path.length; i++) {
+                if (i + 1 <= path.length) { // not the last item
+                    if (path[i] == "components") {
+                        applications.push(path[i + 1])
+                    }
+                }
+            }
+        }
+    }
+
+    return applications.unique()
+}
+
+def getModule(String app) {
+    def fullPath = 'platform/components/' + app + '/MODULE'
+
+    if(fileExists(fullPath)) {
+        def fileContent = readFile(fullPath)
+
+        return "_" + fileContent.trim()
+    }
+
+    return ""
+}
+
+def getVersion() {
+    def fullPath = 'VERSION'
+
+    if(fileExists(fullPath)) {
+        def fileContent = readFile(fullPath)
+
+        return "_" + fileContent.trim()
+    }
+
+    return ""
+} 
+
+def getBranchName(Map scm) {
+    if(scm.GIT_BRANCH.contains('dev-')) {
+        def branchName = scm.GIT_BRANCH.split('-', 2) // Split first occurrence
+
+        return "_" + branchName[1]
+    }
+
+    return ""
+}
+
 podTemplate(label: label, containers: [
   containerTemplate(name: 'docker', image: 'docker', command: 'cat', ttyEnabled: true)
 ],
@@ -11,49 +72,37 @@ volumes: [
         def uniqueApplications
 
         stage('Checkout Repo') {
-            scmVars = checkout scm 
+            scmVars = checkoutCurrentRepo()
         }
 
         stage('Extract Apps to Build') {
             env.GIT_COMMIT = scmVars.GIT_COMMIT
-
             def filesChanged = sh(script: "git show --pretty=\"\" --name-only \${GIT_COMMIT} | tr '\r\n' ',' | sed 's/.\$//'", returnStdout: true)
-            def files = filesChanged.split(',')
-            def applications = []
+            
+            uniqueApplications = extractAppsToDeploy(filesChanged)
+        }
 
-            files.each { file ->
-                def path = "${file}".split('/')
+        stage('Build image') {
+            uniqueApplications.each { app ->
+                def baseImageName = "tgam/sophi:"
+                def tagComponent = app
+                def tagModule = getModule(app)
+                def tagVersion = getVersion()
+                def tagBranchName = getBranchName(scmVars)
+                def imageName = baseImageName + tagComponent + tagModule + tagVersion + tagBranchName
 
-                if (path.length > 3) { // If there are only 3 parts, the file modified doesnt belong to a project
-                    for (i = 0; i < path.length; i++) {
-                        if (i + 1 <= path.length) { // not the last item
-                            if (path[i] == "components") {
-                                applications.push(path[i + 1])
-                            }
-                        }
+                container('docker') {
+                    withCredentials([[$class: 'UsernamePasswordMultiBinding',
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'DOCKER_HUB_USER',
+                    passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
+                    sh """
+                        docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+                        docker build -t ${imageName} platform/components/${app}
+                        """
                     }
                 }
             }
-
-            uniqueApplications = applications.unique()
-
-            println "${uniqueApplications}"
         }
-
-        // stage('Build images') {
-        //     uniqueApplications.each { app ->
-        //           container('docker') {
-        //             withCredentials([[$class: 'UsernamePasswordMultiBinding',
-        //             credentialsId: 'dockerhub',
-        //             usernameVariable: 'DOCKER_HUB_USER',
-        //             passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
-        //             sh """
-        //                 docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
-        //                 docker build -t tgam/${app}:test platform/components/${app}
-        //                 """
-        //             }
-        //         }
-        //     }
-        // }
     }
 }
